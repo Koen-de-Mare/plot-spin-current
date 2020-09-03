@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 # discretization step size
 h = 0.25
 
+# distribution and convolution infrastructure   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 class SampledFunction:
     def __init__(self, samples):
         assert(samples > 0.0)
@@ -45,7 +47,6 @@ class SampledFunction:
     def plot(self, zmax):
         plt.plot(self.make_z_list(), self.values)
         plt.xlim(0.0, zmax)
-        # plt.ylim(-1.0, 1.0)
         plt.hlines(0.0, 0.0, zmax)
         plt.show()
 
@@ -84,7 +85,7 @@ def add_2(f_large, f_small):
 
     return result
 
-# custom mathematical functions
+# custom mathematical functions   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 def a(x):
@@ -121,9 +122,13 @@ def b(x):
 
     return accumulator / num_samples
 
+# main script   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 
 if __name__ == '__main__':
-    material = "Fe"
+    # system properties   ----------------------------------------------------------------------------------------------
+
+    material = "Ni"
 
     if material == "Fe":
         ds_up = 55.2
@@ -160,43 +165,40 @@ if __name__ == '__main__':
 
     vf = 1.0
 
-    tau_up = 10.0
-    tau_dn = 4.0
+    tau_up = 7.0
+    tau_dn = 3.0
 
-    # currently not allowed to be anything else
-    # the derivation for the thermal electron system evolution assumes E_sigma = Ds_sigma
     E_up = ds_up
     E_dn = ds_dn
     E_tot = E_up + E_dn
 
     E_p = 1.0
-    L = 15.0  # laser decay length
+    L = 5.0  # laser decay length
     P0 = 1.0  # laser power
 
-    # set up distributions
+    # set up distributions   -------------------------------------------------------------------------------------------
 
     # laser excitation profile
-    f1 = SampledFunction(10.0 * L / h)
-    for n in range(f1.N):
-        z = f1.index_to_z(n)
-        f1.values[n] = P0 * math.exp(-math.fabs(z) / L)
+    laser_excitation = SampledFunction(10.0 * L / h)
+    for n in range(laser_excitation.N):
+        z = laser_excitation.index_to_z(n)
+        laser_excitation.values[n] = P0 * math.exp(-math.fabs(z) / L)
 
-    print("f1")
-    f1.plot(50.0)
+    # hot electron current by delta_0 excitation
+    J_hot_up_G = SampledFunction(10.0 * vf * tau_up / h)
+    for n in range(J_hot_up_G.N):
+        z = J_hot_up_G.index_to_z(n)
+        J_hot_up_G.values[n] = a(z / (vf * tau_up)) * E_up / (2.0 * E_tot * E_p)
 
-    # spin current by hot electrons excited by delta_0
-    f2 = SampledFunction(10.0 * vf * max(tau_up, tau_dn) / h)
-    for n in range(f2.N):
-        z = f2.index_to_z(n)
-        f2.values[n] = (E_up * a(z / (vf * tau_up)) - E_dn * a(z / (vf * tau_dn))) / (2.0 * E_tot * E_p)
+    J_hot_dn_G = SampledFunction(10.0 * vf * tau_dn / h)
+    for n in range(J_hot_dn_G.N):
+        z = J_hot_dn_G.index_to_z(n)
+        J_hot_dn_G.values[n] = a(z / (vf * tau_dn)) * E_dn / (2.0 * E_tot * E_p)
 
-    print("f2")
-    f2.plot(20.0)
-
-    # spin current due to thermal diffusion diffusion from delta_0 hot electron decay
-    f3 = SampledFunction(10.0 * l_sd / h)
-    for n in range(f3.N):
-        z = f3.index_to_z(n)
+    # spin current due to thermal electron diffusion from delta_0 hot electron decay
+    J_diffusion_G = SampledFunction(10.0 * l_sd / h)
+    for n in range(J_diffusion_G.N):
+        z = J_diffusion_G.index_to_z(n)
 
         sign = 0.0
         if z > 0.0:
@@ -204,56 +206,63 @@ if __name__ == '__main__':
         if z < 0.0:
             sign = -1.0
 
-        f3.values[n] = sign * math.exp(-math.fabs(z) / l_sd) * ds_up * ds_dn / ds_tot
+        J_diffusion_G.values[n] = sign * math.exp(-math.fabs(z) / l_sd) * ds_up * ds_dn / ds_tot
 
-    print("f3")
-    f3.plot(50.0)
+    # source term of thermal electron system, decay component (total includes delta component)
+    diffusion_source_G = SampledFunction(10.0 * vf * max(tau_up, tau_dn) / h)
+    for n in range(diffusion_source_G.N):
+        z = diffusion_source_G.index_to_z(n)
 
-    # decay positions of hot electrons excited by delta_0
-    f4a = SampledFunction(10.0 * vf * max(tau_up, tau_dn) / h)
-    for n in range(f4a.N):
-        z = f4a.index_to_z(n)
-
-        f4a.values[n] = \
+        diffusion_source_G.values[n] = \
             ds_tot / (E_p * alpha_tot * 2.0 * vf * E_tot * ds_up * ds_dn) * (
                 b(z / (vf * tau_up)) * E_up * alpha_dn / tau_up -
                 b(z / (vf * tau_dn)) * E_dn * alpha_up / tau_dn
             )
 
-    #f4b = SampledFunction(10.0 * vf * max(tau_up, tau_dn) / h)
-    # Dirac delta at 0, note factor h^-1 for normalization
-    #f4b.values[f4b.samples] = (alpha_up / ds_up - alpha_dn / ds_dn) / (E_p * alpha_tot * h)
+    dirac_size = ((alpha_up / ds_dn - alpha_dn / ds_dn) /  alpha_tot ) / E_p
 
     #print("f4")
     #f4.plot(20.0)
 
-    # perform convolutions
-    M_hot = convolve(f1, f2)
+    # perform convolutions   -------------------------------------------------------------------------------------------
 
-    #source_diffusion = convolve(f1, f4)
-    #M_thermal = convolve(source_diffusion, f3)
+    J_hot_up = convolve(J_hot_up_G, laser_excitation)
+    J_hot_dn = convolve(J_hot_dn_G, laser_excitation)
 
-    source_diffusion_a = convolve(f1, f4a)
-    source_diffusion_b = f1.multiply((alpha_up / ds_dn - alpha_dn / ds_dn) / (E_p * alpha_tot))
-    source_diffusion = add(source_diffusion_a, source_diffusion_b)
+    J_s_hot = add(J_hot_up, J_hot_dn.multiply(-1.0))
+    J_s_screening = add(J_hot_up, J_hot_dn).multiply((alpha_dn - alpha_up) / alpha_tot)
+    J_s_screened_hot = add(J_s_hot, J_s_screening)
 
-    M_thermal = convolve(source_diffusion, f3)
+    diffusion_source_a = convolve(diffusion_source_G, laser_excitation)
+    diffusion_source_b = laser_excitation.multiply(dirac_size)
+    diffusion_source = add(diffusion_source_a, diffusion_source_b)
 
-    # add hot and thermal
-    M_total = add(M_hot, M_thermal)
+    J_s_diffusion = convolve(J_diffusion_G, diffusion_source)
 
-    print("thermal system source term")
+    J_s = add(add(J_s_hot, J_s_screening), J_s_diffusion)
 
-    plt.plot(source_diffusion_a.make_z_list(), source_diffusion_a.values, 'r', \
-             source_diffusion_b.make_z_list(), source_diffusion_b.values, 'b')
-    plt.show()
+    # plotting   -------------------------------------------------------------------------------------------------------
+
+    if False:
+        print("thermal diffusion system source term")
+        print("red: hot electron decay")
+        print("green: hot electron excitation")
+        print("blue: total")
+        plt.plot(diffusion_source_a.make_z_list(), diffusion_source_a.values, 'r', \
+             diffusion_source_b.make_z_list(), diffusion_source_b.values, 'g', \
+             diffusion_source.make_z_list(),   diffusion_source.values, 'b')
+        plt.xlim(0.0, 100.0)
+        plt.show()
 
     print("spin currents")
 
-    plt.plot(M_hot.make_z_list(), M_hot.values, 'r', \
-             M_thermal.make_z_list(), M_thermal.values, 'g', \
-             M_total.make_z_list(), M_total.values, 'b', \
-             source_diffusion.make_z_list(), source_diffusion.values, 'y')
-    plt.xlim(0.0, 100.0)
+    plt.plot(J_s_hot.make_z_list(), J_s_hot.values, label='J_s_hot')
+    plt.plot(J_s_screening.make_z_list(), J_s_screening.values, label='J_s_screening')
+    plt.plot(J_s_screened_hot.make_z_list(), J_s_screened_hot.values, label='J_s_screened_hot')
+    plt.plot(J_s_diffusion.make_z_list(), J_s_diffusion.values, label='J_s_diffusion')
+    plt.plot(J_s.make_z_list(), J_s.values, label='J_s')
+    plt.legend()
+    plt.xlim(0.0, 25.0)
     plt.hlines(0.0, 0.0, 100.0)
     plt.show()
+

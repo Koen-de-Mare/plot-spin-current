@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # discretization step size
-h = 0.25
+h = 0.1
 
 # distribution and convolution infrastructure   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -168,8 +168,8 @@ if __name__ == '__main__':
     tau_up = 7.0
     tau_dn = 3.0
 
-    E_up = ds_up
-    E_dn = ds_dn
+    E_up = alpha_up
+    E_dn = alpha_dn
     E_tot = E_up + E_dn
 
     E_p = 1.0
@@ -219,10 +219,10 @@ if __name__ == '__main__':
                 b(z / (vf * tau_dn)) * E_dn * alpha_up / tau_dn
             )
 
-    dirac_size = ((alpha_up / ds_dn - alpha_dn / ds_dn) /  alpha_tot ) / E_p
-
-    #print("f4")
-    #f4.plot(20.0)
+    dirac_size = (
+            (alpha_up / ds_up - alpha_dn / ds_dn) / alpha_tot -
+            (E_up     / ds_up - E_dn     / ds_dn) / E_tot
+        ) / E_p
 
     # perform convolutions   -------------------------------------------------------------------------------------------
 
